@@ -27,7 +27,7 @@ export default defineNuxtConfig({
         {
           rel: 'stylesheet',
           href: 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css',
-           crossorigin: 'anonymous'
+          crossorigin: 'anonymous'
         }
       ]
     }
@@ -42,6 +42,9 @@ export default defineNuxtConfig({
             instance: remarkWikiLink,
             options: wikiLinkOptions
           },
+        },
+        rehypePlugins: {
+          'rehype-katex': {}
         },
         highlight: {
           theme: 'catppuccin-frappe',
