@@ -34,7 +34,11 @@
     "@tiptap/vue-3": "^3",
     "better-sqlite3": "^13.0.3",
     "js-sha256": "^1.0.0",
+    "lucide-vue-next": "^1.0.0",
+    "mermaid": "^12.3.0",
     "nuxt": "^4.6.2",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
     "remark-wiki-link": "^2.0.1",
     "tailwindcss": "^4",
     "typescript": "^7.0.2",
@@ -42,6 +46,7 @@
     "vue-router": "^5.3.1"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.152",
     "@types/better-sqlite3": "^9.6.0"
   }
 }

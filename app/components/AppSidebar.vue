@@ -1,3 +1,4 @@
+<!-- app/components/Sidebar.vue -->
 <template>
   <div>
     <!-- Mobile Backdrop -->
@@ -47,11 +48,19 @@
 
       <!-- Albero delle Note con UTree -->
       <nav class="flex-1 overflow-y-auto px-2 py-2 text-sm">
-        <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-          Vault
+        <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 flex items-center justify-between">
+          <span>Vault</span>
+          <span v-if="pending" class="inline-block w-2 h-2 rounded-full bg-amber-500 animate-ping" title="Caricamento in corso..."></span>
         </div>
 
-        <template v-if="treeItems.length > 0">
+        <!-- Skeleton loader durante il caricamento lazy -->
+        <div v-if="pending && !allNotes" class="px-2 py-3 space-y-2 animate-pulse">
+          <div class="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-3/4"></div>
+          <div class="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-1/2"></div>
+          <div class="h-4 bg-neutral-200 dark:bg-neutral-800 rounded w-5/6"></div>
+        </div>
+
+        <template v-else-if="treeItems.length > 0">
           <UTree
             v-model:expanded="expandedNodes"
             :items="treeItems"
@@ -65,7 +74,7 @@
             }"
             @select="onTreeSelect"
           >
-            <!-- Slot icona: visualizza emoji o icona file/cartella -->
+            <!-- Slot icona -->
             <template #item-leading="{ item, expanded }">
               <span v-if="(item as any).emoji" class="text-sm shrink-0 mr-1 select-none">
                 {{ (item as any).emoji }}
@@ -82,7 +91,7 @@
               />
             </template>
 
-            <!-- Slot label: cliccare sul TESTO naviga alla nota/index -->
+            <!-- Slot label -->
             <template #item-label="{ item }">
               <span
                 class="truncate text-xs select-none hover:underline cursor-pointer"
@@ -95,7 +104,7 @@
               </span>
             </template>
 
-            <!-- Slot trailing: freccetta visibile per indicare se la cartella è aperta/chiusa -->
+            <!-- Slot trailing -->
             <template #item-trailing="{ item, expanded }">
               <UIcon
                 v-if="item.children?.length"
@@ -126,11 +135,14 @@ import type { TreeItem } from '@nuxt/ui'
 const { isOpen, close } = useSidebar()
 const route = useRoute()
 
-// Recupera tutte le note per la struttura ad albero
-const { data: allNotes } = await useAsyncData('all-notes-tree', () => {
+// Uso di useLazyAsyncData con cache persistente per evitare chiamate duplicate
+const { data: allNotes, pending } = useLazyAsyncData('sidebar-all-notes', () => {
   return queryCollection('content')
     .select('path', 'title', 'stem')
     .all()
+}, {
+  server: true,
+  default: () => []
 })
 
 const searchQuery = ref('')
@@ -142,7 +154,6 @@ interface CustomTreeItem extends TreeItem {
   children?: CustomTreeItem[]
 }
 
-// Funzione ricorsiva di ordinamento alfabetico (prima cartelle, poi file)
 function sortTreeItems(items: CustomTreeItem[]): CustomTreeItem[] {
   return items
     .map(item => {
@@ -168,24 +179,22 @@ function sortTreeItems(items: CustomTreeItem[]): CustomTreeItem[] {
     })
 }
 
-// Costruzione gerarchica dell'albero delle note
 function buildNoteTree(notes: any[]): CustomTreeItem[] {
   const rootNodes: CustomTreeItem[] = []
   const folderMap = new Map<string, CustomTreeItem>()
   const folderIndexNotes = new Map<string, any>()
 
-  // 1. Mappa i file index delle cartelle (chiave: path della cartella)
   for (const note of notes) {
+    if (!note.path || !note.stem) continue
     if (note.path === '/' || note.stem === 'index') continue
 
-    const isIndex = note.stem?.endsWith('/index') || note.path.endsWith('/index')
+    const isIndex = note.stem.endsWith('/index') || note.path.endsWith('/index')
     if (isIndex) {
       const folderKey = note.stem.slice(0, -6).replace(/^\//, '')
       folderIndexNotes.set(folderKey, note)
     }
   }
 
-  // 2. Home / Index principale
   const homeNote = notes.find(n => n.path === '/' || n.stem === 'index')
   if (homeNote) {
     rootNodes.push({
@@ -197,16 +206,16 @@ function buildNoteTree(notes: any[]): CustomTreeItem[] {
     })
   }
 
-  // 3. Costruzione della gerarchia
   for (const note of notes) {
+    if (!note.path || !note.stem) continue
     if (note.path === '/' || note.stem === 'index') continue
 
-    const isIndex = note.stem?.endsWith('/index') || note.path.endsWith('/index')
+    const isIndex = note.stem.endsWith('/index') || note.path.endsWith('/index')
     if (isIndex) continue
 
     const cleanStem = note.stem.replace(/^\//, '')
     const parts = cleanStem.split('/')
-    const fileName = parts[parts.length - 1]
+    const fileName = parts[parts.length - 1] || ''
     const folderParts = parts.slice(0, -1)
 
     let currentChildren = rootNodes
@@ -254,7 +263,6 @@ function buildNoteTree(notes: any[]): CustomTreeItem[] {
     })
   }
 
-  // 4. Cartelle che contengono esclusivamente un file index.md
   for (const [folderKey, indexNote] of folderIndexNotes.entries()) {
     if (!folderMap.has(folderKey)) {
       const parts = folderKey.split('/')
@@ -297,31 +305,6 @@ function buildNoteTree(notes: any[]): CustomTreeItem[] {
   return home ? [home, ...sortedRemaining] : sortedRemaining
 }
 
-// Click sul TESTO: esegue la navigazione diretta interrompendo l'evento di selezione di UTree
-function onItemLabelClick(item: CustomTreeItem) {
-  if (item.path) {
-    handleNavigate(item.path)
-  }
-}
-
-// Click sull'intera riga (evento nativo di UTree):
-// Se è un file singolo naviga, se è una cartella lascia gestire l'espansione/compressione a UTree
-function onTreeSelect(event: any, item: CustomTreeItem) {
-  if (!item.children || item.children.length === 0) {
-    if (item.path) {
-      handleNavigate(item.path)
-    }
-  }
-}
-
-function handleNavigate(path: string) {
-  navigateTo(path)
-  if (typeof window !== 'undefined' && window.innerWidth < 768) {
-    close()
-  }
-}
-
-// Filtra l'albero per la barra di ricerca
 function filterTree(nodes: CustomTreeItem[], query: string): CustomTreeItem[] {
   const result: CustomTreeItem[] = []
 
@@ -340,8 +323,10 @@ function filterTree(nodes: CustomTreeItem[], query: string): CustomTreeItem[] {
   return result
 }
 
+// Struttura calcolata e memorizzata in cache
 const treeItems = computed(() => {
-  if (!allNotes.value) return []
+  if (!allNotes.value || allNotes.value.length === 0) return []
+  
   const fullTree = buildNoteTree(allNotes.value)
 
   if (!searchQuery.value.trim()) {
@@ -350,4 +335,25 @@ const treeItems = computed(() => {
 
   return filterTree(fullTree, searchQuery.value.toLowerCase().trim())
 })
+
+function onItemLabelClick(item: CustomTreeItem) {
+  if (item.path) {
+    handleNavigate(item.path)
+  }
+}
+
+function onTreeSelect(event: any, item: CustomTreeItem) {
+  if (!item.children || item.children.length === 0) {
+    if (item.path) {
+      handleNavigate(item.path)
+    }
+  }
+}
+
+function handleNavigate(path: string) {
+  navigateTo(path)
+  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+    close()
+  }
+}
 </script>

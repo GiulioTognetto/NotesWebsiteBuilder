@@ -11,6 +11,7 @@ export default defineContentConfig({
           '**/.*',
           "templates/**",
           "scripts/**",
+          "dailynotes/**",
           "**/attachments/**",
           'LICENSE',
         ]
